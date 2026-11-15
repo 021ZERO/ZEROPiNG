@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ZEROPiNG</string>
-    <string name="home_no_server">سروری انتخاب نشده</string>
-    <string name="settings_appearance">ظاهر</string>
-    <string name="settings_accent">رنگ تاکید</string>
 </resources>
