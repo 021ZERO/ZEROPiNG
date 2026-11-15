@@ -109,7 +109,7 @@ fun ZeroPingDemoApp() {
     Scaffold(
         bottomBar = {
             NavigationBar {
-                listOf("خانه", "سرورها", "اشتراک", "حساب").forEachIndexed { i, label ->
+                listOf("خانه", "سرویس‌ها", "اشتراک", "حساب").forEachIndexed { i, label ->
                     NavigationBarItem(
                         selected = tab == i,
                         onClick = { tab = i },
@@ -121,18 +121,14 @@ fun ZeroPingDemoApp() {
         },
     ) { pad ->
         Column(
-            Modifier
-                .fillMaxSize()
-                .padding(pad)
-                .padding(16.dp),
+            Modifier.fillMaxSize().padding(pad).padding(16.dp),
         ) {
             Text("ZEROPiNG", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             Text(
-                if (loggedIn) "وارد شده · $userId" else "خدای اپ‌های VPN · ورود امن",
+                if (loggedIn) "وارد شده · $userId" else "همگام با بات و مینی‌اپ",
                 style = MaterialTheme.typography.bodyMedium,
             )
             Spacer(Modifier.height(12.dp))
-
             when (tab) {
                 0 -> {
                     val selected = servers.find { it.id == selectedId }
@@ -152,43 +148,24 @@ fun ZeroPingDemoApp() {
                                     else -> Color(0xFFFF6B6B)
                                 },
                             )
-                            Text(selected?.name ?: "سروری انتخاب نشده")
+                            Text(selected?.name ?: "سرویسی انتخاب نشده")
                             Text("${selected?.protocol ?: "—"} · ${selected?.address ?: "—"}")
                             Text(statusNote, style = MaterialTheme.typography.bodySmall)
                             if (loggedIn && accountName.isNotBlank()) {
                                 Text("حساب: $accountName · موجودی: $balanceText", style = MaterialTheme.typography.bodySmall)
                             }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Button(
-                                    onClick = {
-                                        if (!loggedIn) {
-                                            statusNote = "اول از تب حساب وارد شو"
-                                            tab = 3
-                                            return@Button
-                                        }
-                                        if (selected == null) {
-                                            statusNote = "اول سرور را انتخاب کن"
-                                            return@Button
-                                        }
-                                        connecting = true
-                                        connected = false
-                                        statusNote = "شبیه‌سازی اتصال به ${selected.name}…"
-                                        appendLog("Connect → ${selected.name}")
-                                        connecting = false
-                                        connected = true
-                                        statusNote = "متصل (تست UI) · تونل واقعی در بیلد libbox"
-                                    },
-                                    enabled = !connecting,
-                                ) { Text(if (connected) "اتصال مجدد" else "اتصال") }
-                                OutlinedButton(
-                                    onClick = {
-                                        connected = false
-                                        connecting = false
-                                        statusNote = "قطع شد"
-                                        appendLog("Disconnect")
-                                    },
-                                    enabled = connected || connecting,
-                                ) { Text("قطع") }
+                                Button(onClick = {
+                                    if (!loggedIn) { statusNote = "اول از تب حساب وارد شو"; tab = 3; return@Button }
+                                    if (selected == null) { statusNote = "اول سرویس را انتخاب کن"; return@Button }
+                                    connecting = true; connected = false
+                                    appendLog("Connect → ${selected.name}")
+                                    connecting = false; connected = true
+                                    statusNote = "متصل (تست UI) · تونل واقعی در بیلد libbox"
+                                }, enabled = !connecting) { Text(if (connected) "اتصال مجدد" else "اتصال") }
+                                OutlinedButton(onClick = {
+                                    connected = false; connecting = false; statusNote = "قطع شد"; appendLog("Disconnect")
+                                }, enabled = connected || connecting) { Text("قطع") }
                             }
                         }
                     }
@@ -196,18 +173,10 @@ fun ZeroPingDemoApp() {
                     Text("لاگ نشست", fontWeight = FontWeight.Bold)
                     Text(log, style = MaterialTheme.typography.bodySmall)
                 }
-
                 1 -> {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(servers, key = { it.id }) { s ->
-                            Card(
-                                onClick = {
-                                    selectedId = s.id
-                                    appendLog("Select ${s.name}")
-                                    tab = 0
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
+                            Card(onClick = { selectedId = s.id; appendLog("Select ${s.name}"); tab = 0 }, modifier = Modifier.fillMaxWidth()) {
                                 Column(Modifier.padding(12.dp)) {
                                     Text(s.name, fontWeight = FontWeight.Bold)
                                     Text("${s.protocol} · ${s.address}")
@@ -218,161 +187,83 @@ fun ZeroPingDemoApp() {
                         }
                     }
                 }
-
                 2 -> {
-                    Column(
-                        Modifier.verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text("لینک اشتراک / کانفیگ را بچسبان")
-                        OutlinedTextField(
-                            value = subUrl,
-                            onValueChange = { subUrl = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            minLines = 3,
-                            label = { Text("vless:// … یا لینک ساب") },
-                        )
-                        Button(
-                            onClick = {
-                                val text = subUrl.trim()
-                                if (text.isBlank()) {
-                                    appendLog("Import empty")
-                                    statusNote = "متن خالی است"
-                                    return@Button
-                                }
-                                val name = when {
-                                    text.startsWith("vless://") -> "Imported VLESS"
-                                    text.startsWith("vmess://") -> "Imported VMess"
-                                    text.startsWith("trojan://") -> "Imported Trojan"
-                                    text.startsWith("ss://") -> "Imported SS"
-                                    text.startsWith("http") -> "Subscription"
-                                    else -> "Imported node"
-                                }
-                                val id = (servers.size + 1).toString()
-                                servers.add(0, DemoServer(id, name, name.substringAfter(" "), "imported.node", null))
-                                selectedId = id
-                                appendLog("Imported: $name")
-                                statusNote = "وارد شد · از تب سرورها ببین"
-                                subUrl = ""
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("ورود اشتراک") }
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("لینک اشتراک / کانفیگ")
+                        OutlinedTextField(value = subUrl, onValueChange = { subUrl = it }, modifier = Modifier.fillMaxWidth(), minLines = 3, label = { Text("vless:// یا لینک ساب") })
+                        Button(onClick = {
+                            val text = subUrl.trim()
+                            if (text.isBlank()) return@Button
+                            val name = when {
+                                text.startsWith("vless://") -> "Imported VLESS"
+                                text.startsWith("vmess://") -> "Imported VMess"
+                                text.startsWith("trojan://") -> "Imported Trojan"
+                                text.startsWith("ss://") -> "Imported SS"
+                                text.startsWith("http") -> "Subscription"
+                                else -> "Imported node"
+                            }
+                            val id = (servers.size + 1).toString()
+                            servers.add(0, DemoServer(id, name, name.substringAfter(" "), "imported.node", null))
+                            selectedId = id; appendLog("Imported: $name"); subUrl = ""
+                        }, modifier = Modifier.fillMaxWidth()) { Text("ورود اشتراک") }
                     }
                 }
-
                 else -> {
-                    Column(
-                        Modifier.verticalScroll(rememberScrollState()),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text("ورود امن اپ", fontWeight = FontWeight.Bold)
-                        Text("شناسه تلگرام + رمزی که در بات/مینی‌اپ گذاشتی", style = MaterialTheme.typography.bodySmall)
-                        OutlinedTextField(
-                            value = workerBase,
-                            onValueChange = { workerBase = it },
-                            label = { Text("آدرس Worker") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                        )
-                        OutlinedTextField(
-                            value = userId,
-                            onValueChange = { userId = it.filter { ch -> ch.isDigit() } },
-                            label = { Text("شناسه عددی تلگرام") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        )
-                        OutlinedTextField(
-                            value = password,
-                            onValueChange = { password = it },
-                            label = { Text("رمز ورود اپ") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        )
+                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("ورود امن (همگام با بات/مینی‌اپ)", fontWeight = FontWeight.Bold)
+                        OutlinedTextField(value = workerBase, onValueChange = { workerBase = it }, label = { Text("آدرس Worker") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
+                        OutlinedTextField(value = userId, onValueChange = { userId = it.filter { ch -> ch.isDigit() } }, label = { Text("شناسه عددی تلگرام") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
+                        OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("رمز ورود اپ") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
                         Text(authMsg, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA6BD))
-                        Button(
-                            onClick = {
-                                if (authBusy) return@Button
-                                val uid = userId.trim()
-                                val pass = password
-                                val base = workerBase.trim().trimEnd('/')
-                                if (uid.length < 5 || pass.length < 4) {
-                                    authMsg = "شناسه و رمز را درست وارد کن"
-                                    return@Button
-                                }
-                                authBusy = true
-                                authMsg = "در حال بررسی…"
-                                scope.launch {
-                                    val result = withContext(Dispatchers.IO) {
-                                        try {
-                                            val url = URL("$base/api/app/login")
-                                            val conn = (url.openConnection() as HttpURLConnection).apply {
-                                                requestMethod = "POST"
-                                                connectTimeout = 15000
-                                                readTimeout = 15000
-                                                doOutput = true
-                                                setRequestProperty("Content-Type", "application/json")
-                                            }
-                                            val body = JSONObject()
-                                                .put("userId", uid)
-                                                .put("password", pass)
-                                                .toString()
-                                            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-                                            val code = conn.responseCode
-                                            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
-                                                ?.bufferedReader()?.readText().orEmpty()
-                                            conn.disconnect()
-                                            Pair(code, text)
-                                        } catch (e: Exception) {
-                                            Pair(-1, e.message ?: "network error")
-                                        }
-                                    }
-                                    authBusy = false
-                                    val (code, text) = result
+                        Button(onClick = {
+                            if (authBusy) return@Button
+                            val uid = userId.trim(); val pass = password; val base = workerBase.trim().trimEnd('/')
+                            if (uid.length < 5 || pass.length < 4) { authMsg = "شناسه و رمز را درست وارد کن"; return@Button }
+                            authBusy = true; authMsg = "در حال بررسی…"
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
                                     try {
-                                        val j = JSONObject(text.ifBlank { "{}" })
-                                        if (code in 200..299 && j.optBoolean("ok")) {
-                                            loggedIn = true
-                                            accountName = listOf(
-                                                j.optString("firstName"),
-                                                j.optString("lastName"),
-                                            ).joinToString(" ").trim()
-                                            balanceText = j.opt("balance")?.toString() ?: "—"
-                                            authMsg = "✅ ورود موفق"
-                                            statusNote = "وارد شدی · می‌تونی وصل شوی"
-                                            appendLog("Login OK uid=$uid")
-                                            password = ""
-                                        } else {
-                                            loggedIn = false
-                                            authMsg = "❌ " + (j.optString("error").ifBlank { "ورود ناموفق ($code)" })
-                                            appendLog("Login fail: $authMsg")
+                                        val url = URL("$base/api/app/login")
+                                        val conn = (url.openConnection() as HttpURLConnection).apply {
+                                            requestMethod = "POST"; connectTimeout = 15000; readTimeout = 15000; doOutput = true
+                                            setRequestProperty("Content-Type", "application/json")
                                         }
-                                    } catch (_: Exception) {
-                                        loggedIn = false
-                                        authMsg = "❌ پاسخ نامعتبر از سرور"
-                                        appendLog("Login parse error: $text")
-                                    }
+                                        val body = JSONObject().put("userId", uid).put("password", pass).toString()
+                                        conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                                        val code = conn.responseCode
+                                        val text = (if (code in 200..299) conn.inputStream else conn.errorStream)?.bufferedReader()?.readText().orEmpty()
+                                        conn.disconnect(); Pair(code, text)
+                                    } catch (e: Exception) { Pair(-1, e.message ?: "network error") }
                                 }
-                            },
-                            enabled = !authBusy,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text(if (authBusy) "…" else "ورود") }
+                                authBusy = false
+                                val (code, text) = result
+                                try {
+                                    val j = JSONObject(text.ifBlank { "{}" })
+                                    if (code in 200..299 && j.optBoolean("ok")) {
+                                        loggedIn = true
+                                        accountName = listOf(j.optString("firstName"), j.optString("lastName")).joinToString(" ").trim()
+                                        balanceText = j.opt("balance")?.toString() ?: "—"
+                                        val delivered = j.optInt("deliveredOrders", 0)
+                                        val orders = j.optInt("ordersCount", 0)
+                                        authMsg = "✅ ورود موفق · سرویس $delivered · فاکتور $orders"
+                                        statusNote = "وارد شدی · موجودی $balanceText · سرویس $delivered"
+                                        appendLog("Login OK uid=$uid"); password = ""
+                                    } else {
+                                        loggedIn = false
+                                        authMsg = "❌ " + (j.optString("error").ifBlank { "ورود ناموفق ($code)" })
+                                        appendLog("Login fail: $authMsg")
+                                    }
+                                } catch (_: Exception) {
+                                    loggedIn = false; authMsg = "❌ پاسخ نامعتبر از سرور"; appendLog("Login parse error: $text")
+                                }
+                            }
+                        }, enabled = !authBusy, modifier = Modifier.fillMaxWidth()) { Text(if (authBusy) "…" else "ورود") }
                         if (loggedIn) {
-                            OutlinedButton(
-                                onClick = {
-                                    loggedIn = false
-                                    connected = false
-                                    accountName = ""
-                                    balanceText = "—"
-                                    authMsg = "خارج شدی"
-                                    appendLog("Logout")
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                            ) { Text("خروج از حساب") }
+                            OutlinedButton(onClick = {
+                                loggedIn = false; connected = false; accountName = ""; balanceText = "—"; authMsg = "خارج شدی"; appendLog("Logout")
+                            }, modifier = Modifier.fillMaxWidth()) { Text("خروج از حساب") }
                         }
-                        Text("رمز را از بات → حساب کاربری یا مینی‌اپ تنظیم/تغییر بده.")
+                        Text("همگام: فروشگاه · سرویس‌ها · کیف پول · حساب · پشتیبانی · اپ. رمز از بات یا مینی‌اپ → حساب.")
                     }
                 }
             }
