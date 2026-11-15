@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -32,11 +33,20 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,6 +76,7 @@ data class DemoServer(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ZeroPingDemoApp() {
+    val scope = rememberCoroutineScope()
     var tab by remember { mutableIntStateOf(0) }
     val servers = remember {
         mutableStateListOf(
@@ -77,20 +88,28 @@ fun ZeroPingDemoApp() {
     var selectedId by remember { mutableStateOf("1") }
     var connected by remember { mutableStateOf(false) }
     var connecting by remember { mutableStateOf(false) }
-    var statusNote by remember { mutableStateOf("آماده · نسخه تست رابط") }
+    var statusNote by remember { mutableStateOf("آماده · ورود با شناسه + رمز") }
     var subUrl by remember { mutableStateOf("") }
-    var workerBase by remember { mutableStateOf("https://zero-vpn-v31.reza-rahbari-iphone.workers.dev") }
+    var workerBase by remember {
+        mutableStateOf("https://zero-vpn-v31.reza-rahbari-iphone.workers.dev")
+    }
     var userId by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var loggedIn by remember { mutableStateOf(false) }
+    var accountName by remember { mutableStateOf("") }
+    var balanceText by remember { mutableStateOf("—") }
+    var authBusy by remember { mutableStateOf(false) }
+    var authMsg by remember { mutableStateOf("رمز را از بات → حساب کاربری تنظیم کن") }
     var log by remember { mutableStateOf("Session started") }
 
     fun appendLog(msg: String) {
-        log = msg + "\n" + log.take(800)
+        log = msg + "\n" + log.take(900)
     }
 
     Scaffold(
         bottomBar = {
             NavigationBar {
-                listOf("خانه", "سرورها", "اشتراک", "تنظیمات").forEachIndexed { i, label ->
+                listOf("خانه", "سرورها", "اشتراک", "حساب").forEachIndexed { i, label ->
                     NavigationBarItem(
                         selected = tab == i,
                         onClick = { tab = i },
@@ -108,7 +127,10 @@ fun ZeroPingDemoApp() {
                 .padding(16.dp),
         ) {
             Text("ZEROPiNG", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("خدای اپ‌های VPN · نسخه تست قابل استفاده", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                if (loggedIn) "وارد شده · $userId" else "خدای اپ‌های VPN · ورود امن",
+                style = MaterialTheme.typography.bodyMedium,
+            )
             Spacer(Modifier.height(12.dp))
 
             when (tab) {
@@ -118,21 +140,34 @@ fun ZeroPingDemoApp() {
                         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text(
                                 when {
+                                    !loggedIn -> "نیاز به ورود"
                                     connecting -> "در حال اتصال…"
                                     connected -> "متصل"
                                     else -> "قطع"
                                 },
                                 style = MaterialTheme.typography.titleLarge,
-                                color = if (connected) Color(0xFF2EE59D) else Color(0xFFFFB020),
+                                color = when {
+                                    connected -> Color(0xFF2EE59D)
+                                    loggedIn -> Color(0xFFFFB020)
+                                    else -> Color(0xFFFF6B6B)
+                                },
                             )
                             Text(selected?.name ?: "سروری انتخاب نشده")
                             Text("${selected?.protocol ?: "—"} · ${selected?.address ?: "—"}")
                             Text(statusNote, style = MaterialTheme.typography.bodySmall)
+                            if (loggedIn && accountName.isNotBlank()) {
+                                Text("حساب: $accountName · موجودی: $balanceText", style = MaterialTheme.typography.bodySmall)
+                            }
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Button(
                                     onClick = {
+                                        if (!loggedIn) {
+                                            statusNote = "اول از تب حساب وارد شو"
+                                            tab = 3
+                                            return@Button
+                                        }
                                         if (selected == null) {
-                                            statusNote = "اول از تب سرورها یکی را انتخاب کن"
+                                            statusNote = "اول سرور را انتخاب کن"
                                             return@Button
                                         }
                                         connecting = true
@@ -141,7 +176,7 @@ fun ZeroPingDemoApp() {
                                         appendLog("Connect → ${selected.name}")
                                         connecting = false
                                         connected = true
-                                        statusNote = "متصل (حالت تست UI) · در بیلد کامل تونل واقعی فعال می‌شود"
+                                        statusNote = "متصل (تست UI) · تونل واقعی در بیلد libbox"
                                     },
                                     enabled = !connecting,
                                 ) { Text(if (connected) "اتصال مجدد" else "اتصال") }
@@ -161,14 +196,18 @@ fun ZeroPingDemoApp() {
                     Text("لاگ نشست", fontWeight = FontWeight.Bold)
                     Text(log, style = MaterialTheme.typography.bodySmall)
                 }
+
                 1 -> {
                     LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(servers, key = { it.id }) { s ->
-                            Card(onClick = {
-                                selectedId = s.id
-                                appendLog("Select ${s.name}")
-                                tab = 0
-                            }, modifier = Modifier.fillMaxWidth()) {
+                            Card(
+                                onClick = {
+                                    selectedId = s.id
+                                    appendLog("Select ${s.name}")
+                                    tab = 0
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
                                 Column(Modifier.padding(12.dp)) {
                                     Text(s.name, fontWeight = FontWeight.Bold)
                                     Text("${s.protocol} · ${s.address}")
@@ -179,8 +218,12 @@ fun ZeroPingDemoApp() {
                         }
                     }
                 }
+
                 2 -> {
-                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         Text("لینک اشتراک / کانفیگ را بچسبان")
                         OutlinedTextField(
                             value = subUrl,
@@ -214,37 +257,122 @@ fun ZeroPingDemoApp() {
                             },
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("ورود اشتراک") }
-                        OutlinedButton(
-                            onClick = {
-                                servers.clear()
-                                selectedId = ""
-                                appendLog("Cleared servers")
-                            },
-                            modifier = Modifier.fillMaxWidth(),
-                        ) { Text("پاک کردن لیست") }
                     }
                 }
+
                 else -> {
-                    Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Column(
+                        Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text("ورود امن اپ", fontWeight = FontWeight.Bold)
+                        Text("شناسه تلگرام + رمزی که در بات/مینی‌اپ گذاشتی", style = MaterialTheme.typography.bodySmall)
                         OutlinedTextField(
                             value = workerBase,
                             onValueChange = { workerBase = it },
                             label = { Text("آدرس Worker") },
                             modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
                         )
                         OutlinedTextField(
                             value = userId,
-                            onValueChange = { userId = it },
-                            label = { Text("شناسه تلگرام") },
+                            onValueChange = { userId = it.filter { ch -> ch.isDigit() } },
+                            label = { Text("شناسه عددی تلگرام") },
                             modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         )
-                        Button(onClick = {
-                            appendLog("Saved settings worker=$workerBase uid=$userId")
-                            statusNote = "تنظیمات ذخیره شد (محلی)"
-                        }, modifier = Modifier.fillMaxWidth()) { Text("ذخیره") }
-                        Text("این بیلد برای تست رابط و جریان کار است.")
-                        Text("تونل واقعی در بیلد کامل با libbox فعال می‌شود.")
-                        Text("بات: دریافت اپ / آپلود اپ · Worker 1.6.55+")
+                        OutlinedTextField(
+                            value = password,
+                            onValueChange = { password = it },
+                            label = { Text("رمز ورود اپ") },
+                            modifier = Modifier.fillMaxWidth(),
+                            singleLine = true,
+                            visualTransformation = PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        )
+                        Text(authMsg, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA6BD))
+                        Button(
+                            onClick = {
+                                if (authBusy) return@Button
+                                val uid = userId.trim()
+                                val pass = password
+                                val base = workerBase.trim().trimEnd('/')
+                                if (uid.length < 5 || pass.length < 4) {
+                                    authMsg = "شناسه و رمز را درست وارد کن"
+                                    return@Button
+                                }
+                                authBusy = true
+                                authMsg = "در حال بررسی…"
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        try {
+                                            val url = URL("$base/api/app/login")
+                                            val conn = (url.openConnection() as HttpURLConnection).apply {
+                                                requestMethod = "POST"
+                                                connectTimeout = 15000
+                                                readTimeout = 15000
+                                                doOutput = true
+                                                setRequestProperty("Content-Type", "application/json")
+                                            }
+                                            val body = JSONObject()
+                                                .put("userId", uid)
+                                                .put("password", pass)
+                                                .toString()
+                                            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
+                                            val code = conn.responseCode
+                                            val text = (if (code in 200..299) conn.inputStream else conn.errorStream)
+                                                ?.bufferedReader()?.readText().orEmpty()
+                                            conn.disconnect()
+                                            Pair(code, text)
+                                        } catch (e: Exception) {
+                                            Pair(-1, e.message ?: "network error")
+                                        }
+                                    }
+                                    authBusy = false
+                                    val (code, text) = result
+                                    try {
+                                        val j = JSONObject(text.ifBlank { "{}" })
+                                        if (code in 200..299 && j.optBoolean("ok")) {
+                                            loggedIn = true
+                                            accountName = listOf(
+                                                j.optString("firstName"),
+                                                j.optString("lastName"),
+                                            ).joinToString(" ").trim()
+                                            balanceText = j.opt("balance")?.toString() ?: "—"
+                                            authMsg = "✅ ورود موفق"
+                                            statusNote = "وارد شدی · می‌تونی وصل شوی"
+                                            appendLog("Login OK uid=$uid")
+                                            password = ""
+                                        } else {
+                                            loggedIn = false
+                                            authMsg = "❌ " + (j.optString("error").ifBlank { "ورود ناموفق ($code)" })
+                                            appendLog("Login fail: $authMsg")
+                                        }
+                                    } catch (_: Exception) {
+                                        loggedIn = false
+                                        authMsg = "❌ پاسخ نامعتبر از سرور"
+                                        appendLog("Login parse error: $text")
+                                    }
+                                }
+                            },
+                            enabled = !authBusy,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text(if (authBusy) "…" else "ورود") }
+                        if (loggedIn) {
+                            OutlinedButton(
+                                onClick = {
+                                    loggedIn = false
+                                    connected = false
+                                    accountName = ""
+                                    balanceText = "—"
+                                    authMsg = "خارج شدی"
+                                    appendLog("Logout")
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) { Text("خروج از حساب") }
+                        }
+                        Text("رمز را از بات → حساب کاربری یا مینی‌اپ تنظیم/تغییر بده.")
                     }
                 }
             }
