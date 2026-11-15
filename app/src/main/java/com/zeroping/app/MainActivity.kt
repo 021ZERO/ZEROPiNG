@@ -90,16 +90,14 @@ fun ZeroPingDemoApp() {
     var connecting by remember { mutableStateOf(false) }
     var statusNote by remember { mutableStateOf("آماده · ورود با شناسه + رمز") }
     var subUrl by remember { mutableStateOf("") }
-    var workerBase by remember {
-        mutableStateOf("https://zero-vpn-v31.reza-rahbari-iphone.workers.dev")
-    }
+    val workerBase = "https://zero-vpn-v31.reza-rahbari-iphone.workers.dev"
     var userId by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var loggedIn by remember { mutableStateOf(false) }
     var accountName by remember { mutableStateOf("") }
     var balanceText by remember { mutableStateOf("—") }
     var authBusy by remember { mutableStateOf(false) }
-    var authMsg by remember { mutableStateOf("رمز را از بات → حساب کاربری تنظیم کن") }
+    var authMsg by remember { mutableStateOf("رمز را از بات → حساب کاربری دوباره تنظیم کن") }
     var log by remember { mutableStateOf("Session started") }
 
     fun appendLog(msg: String) {
@@ -211,13 +209,12 @@ fun ZeroPingDemoApp() {
                 else -> {
                     Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text("ورود امن (همگام با بات/مینی‌اپ)", fontWeight = FontWeight.Bold)
-                        OutlinedTextField(value = workerBase, onValueChange = { workerBase = it }, label = { Text("آدرس Worker") }, modifier = Modifier.fillMaxWidth(), singleLine = true)
                         OutlinedTextField(value = userId, onValueChange = { userId = it.filter { ch -> ch.isDigit() } }, label = { Text("شناسه عددی تلگرام") }, modifier = Modifier.fillMaxWidth(), singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number))
                         OutlinedTextField(value = password, onValueChange = { password = it }, label = { Text("رمز ورود اپ") }, modifier = Modifier.fillMaxWidth(), singleLine = true, visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
                         Text(authMsg, style = MaterialTheme.typography.bodySmall, color = Color(0xFF9AA6BD))
                         Button(onClick = {
                             if (authBusy) return@Button
-                            val uid = userId.trim(); val pass = password; val base = workerBase.trim().trimEnd('/')
+                            val uid = userId.trim(); val pass = password; val base = workerBase
                             if (uid.length < 5 || pass.length < 4) { authMsg = "شناسه و رمز را درست وارد کن"; return@Button }
                             authBusy = true; authMsg = "در حال بررسی…"
                             scope.launch {
